@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+.gitignore
+.env*
+!.env.example
+.openclaw-workspace
+app/generated
+*.log
+.DS_Store
+npm-debug.log*
+README.md
+SECURITY.md
+DEPLOY.md
+lib/agent/README.md
+_test-*.ts

@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --brand: #4338ca;
+  --brand-dark: #3730a3;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-brand: var(--brand);
+  --color-brand-dark: var(--brand-dark);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+@layer components {
+  /* Buttons */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
+      transition-colors disabled:cursor-not-allowed disabled:opacity-50
+      bg-indigo-600 text-white shadow-sm hover:bg-indigo-700;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
+      transition-colors disabled:cursor-not-allowed disabled:opacity-50
+      border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
+      transition-colors disabled:cursor-not-allowed disabled:opacity-50
+      bg-red-600 text-white shadow-sm hover:bg-red-700;
+  }
+
+  /* Form fields */
+  .field-label {
+    @apply block text-sm font-medium text-slate-700 mb-1;
+  }
+  .field-input {
+    @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900
+      shadow-sm placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none
+      focus:ring-2 focus:ring-indigo-500/30;
+  }
+  .field-hint {
+    @apply mt-1 text-xs text-slate-500;
+  }
+  .field-error {
+    @apply mt-1 text-xs font-medium text-red-600;
+  }
+
+  /* Surfaces */
+  .card {
+    @apply rounded-xl border border-slate-200 bg-white p-6 shadow-sm;
+  }
+
+  /* Tables */
+  .table-wrap {
+    @apply overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm;
+  }
+  .table-base {
+    @apply w-full min-w-max border-collapse text-sm;
+  }
+  .table-base th {
+    @apply border-b border-slate-200 bg-slate-50 px-4 py-3 text-left text-xs font-semibold
+      uppercase tracking-wide text-slate-500;
+  }
+  .table-base td {
+    @apply border-b border-slate-100 px-4 py-3 text-slate-700 last:border-b-0;
+  }
+  .table-base tr:last-child td {
+    @apply border-b-0;
+  }
+}

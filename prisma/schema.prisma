@@ -1,0 +1,167 @@
+// Prisma schema for Staffstream.
+// See CLAUDE.md for project scope and conventions before adding models.
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+// Single-tenant, single WhatsApp number — this is always exactly one row
+// (id fixed to "default"), editable from /dashboard/settings. Falls back
+// to the WHATSAPP_* env vars/secrets when unset, so a fresh deploy keeps
+// working before the builder ever visits Settings — see lib/settings.ts.
+model WhatsAppSettings {
+  id              String   @id @default("default")
+  phoneNumberId   String?
+  accessToken     String?
+  appSecret       String?
+  verifyToken     String?
+  updatedAt       DateTime @updatedAt
+}
+
+enum ProjectStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+model Project {
+  id         String        @id @default(cuid())
+  name       String
+  address    String
+  reraNumber String?
+  status     ProjectStatus @default(ACTIVE)
+  createdAt  DateTime      @default(now())
+
+  documents Document[]
+  leads     Lead[]
+}
+
+enum DocumentStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
+model Document {
+  id               String         @id @default(cuid())
+  projectId        String
+  fileName         String
+  gcsPath          String
+  extractedText    String?        @db.Text
+  status           DocumentStatus
+  // Short human-readable reason set when status is FAILED (e.g. "scanned
+  // PDF with no extractable text"). Null while PROCESSING/READY.
+  processingError  String?        @db.Text
+  uploadedAt       DateTime       @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@index([projectId])
+}
+
+enum LeadStage {
+  NEW
+  GREETED
+  QUALIFYING
+  QUALIFIED
+  FOLLOWUP
+  SITE_VISIT_SCHEDULED
+  HANDED_OFF
+  LOST
+}
+
+model Lead {
+  id              String    @id @default(cuid())
+  projectId       String
+  whatsappNumber  String
+  name            String?
+  stage           LeadStage @default(NEW)
+  configuration   String?
+  budget          String?
+  purpose         String?
+  timeline        String?
+  createdAt       DateTime  @default(now())
+  lastContactedAt DateTime?
+  // Set by the handoff_to_human agent tool — why the AI stopped handling
+  // this lead (site visit confirmed, explicit request, out-of-scope
+  // question, negotiation, etc).
+  handoffReason   String?   @db.Text
+  // Number of automated re-engagement messages sent by the follow-up cron
+  // (see app/api/cron/followups). Capped — the lead is marked LOST once
+  // this hits the cap without a reply.
+  followupCount   Int       @default(0)
+
+  project      Project       @relation(fields: [projectId], references: [id])
+  conversation Conversation?
+  siteVisits   SiteVisit[]
+
+  @@unique([projectId, whatsappNumber])
+  @@index([projectId])
+  @@index([stage])
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  leadId    String   @unique
+  createdAt DateTime @default(now())
+
+  lead     Lead      @relation(fields: [leadId], references: [id])
+  messages Message[]
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+model Message {
+  id             String            @id @default(cuid())
+  conversationId String
+  direction      MessageDirection
+  body           String            @db.Text
+  createdAt      DateTime          @default(now())
+  // WhatsApp's message id for INBOUND messages only (null for OUTBOUND and
+  // for follow-ups, which have no inbound message to key off). Meta
+  // retries webhook deliveries whenever our response is slow, so this is
+  // how the webhook route recognizes "already handled this one" and
+  // avoids sending a duplicate reply. @unique enforces that at the DB
+  // level too, in case two retries race past the app-level check.
+  waMessageId    String?           @unique
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@index([conversationId])
+}
+
+enum SiteVisitStatus {
+  PROPOSED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+model SiteVisit {
+  id             String          @id @default(cuid())
+  leadId         String
+  proposedSlots  Json?
+  confirmedSlot  DateTime?
+  status         SiteVisitStatus @default(PROPOSED)
+  createdAt      DateTime        @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id])
+
+  @@index([leadId])
+}
