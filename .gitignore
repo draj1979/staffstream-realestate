@@ -46,3 +46,6 @@ next-env.d.ts
 # OpenClaw workspace/session data (conversation state, not source) — path
 # from OPENCLAW_WORKSPACE_PATH in .env.local
 /.openclaw-workspace
+
+# local claude-code tool state
+.claude/scheduled_tasks.lock

@@ -1,0 +1,90 @@
+name: Deploy to Cloud Run
+
+# Push to main -> build image -> apply pending Prisma migrations -> deploy.
+# See DEPLOY.md for the equivalent one-off gcloud commands this mirrors,
+# and CI.md for the one-time GCP setup this workflow depends on
+# (the staffstream-github-deploy service account + its GCP_SA_KEY secret).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Only one deploy in flight at a time; a second push while one is running
+# waits rather than racing it (never cancels a deploy already in progress).
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: angular-unison-476906-s5
+  REGION: asia-south1
+  SERVICE_NAME: staffstream
+  AR_REPO: staffstream
+
+jobs:
+  deploy:
+    name: Build, migrate, deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${{ env.REGION }}-docker.pkg.dev" --quiet
+
+      - name: Build and push image
+        env:
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE_NAME }}
+        run: |
+          docker build \
+            -t "${IMAGE}:${{ github.sha }}" \
+            -t "${IMAGE}:latest" \
+            .
+          docker push "${IMAGE}:${{ github.sha }}"
+          docker push "${IMAGE}:latest"
+
+      # Applies only pending migrations (no prompts, no shadow DB) via the
+      # same one-off Cloud Run Job DEPLOY.md's manual flow uses — never
+      # `prisma migrate dev` against prod. Runs before the traffic-serving
+      # deploy below so a bad migration fails the workflow before any new
+      # code is live.
+      - name: Run pending Prisma migrations
+        env:
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+        run: |
+          gcloud run jobs update "${{ env.SERVICE_NAME }}-migrate" \
+            --image="${IMAGE}" \
+            --region="${{ env.REGION }}" \
+            --quiet
+          gcloud run jobs execute "${{ env.SERVICE_NAME }}-migrate" \
+            --region="${{ env.REGION }}" \
+            --wait
+
+      - name: Deploy to Cloud Run
+        env:
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+        run: |
+          gcloud run deploy "${{ env.SERVICE_NAME }}" \
+            --image="${IMAGE}" \
+            --region="${{ env.REGION }}" \
+            --quiet
+
+      - name: Show deployed URL
+        run: |
+          gcloud run services describe "${{ env.SERVICE_NAME }}" \
+            --region="${{ env.REGION }}" \
+            --format='value(status.url)'
